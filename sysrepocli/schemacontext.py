@@ -12,6 +12,15 @@ class ContextNode:
     list_keys: list[str]
     leaf_value: str
 
+    def is_leaf(self):
+        return isinstance(self.snode, SLeaf) or isinstance(self.snode, SLeafList)
+    
+    def is_list(self):
+        return isinstance(self.snode, SList)
+    
+    def is_container(self):
+        return isinstance(self.snode, SContainer)
+
 
 class SchemaContext:
     def __init__(self, session: sysrepo.session.SysrepoSession=None):
@@ -96,3 +105,103 @@ class SchemaContext:
             result.append(ContextNode(schema_node, [], None))
         return result
     
+    def ctx_to_xpath(self, ctx: list[ContextNode]) -> str:
+        result = []
+        mod = ""
+        for node in ctx:
+            if node.list_keys:
+                if isinstance(node.snode, SList):
+                    if mod != node.snode.module().name():
+                        mod = node.snode.module().name()
+                        s = f"{node.snode.module().name()}:{node.snode.name()}"
+                    else:
+                        s = f"{node.snode.name()}"
+                    keys = node.snode.keys()
+                    index = 0
+                    for key in keys:
+                        v = node.list_keys[index]
+                        s += f"[{key.name()}='{v}']"
+                        index += 1
+                    result.append(s)
+            else:
+                if mod != node.snode.module().name():
+                    mod = node.snode.module().name()
+                    s = f"{node.snode.module().name()}:{node.snode.name()}"
+                else:
+                    s = f"{node.snode.name()}"
+                result.append(s)
+        return "/" + "/".join(result)
+    
+    def show_available_commands(self, prefix: list[str], is_status) -> dict[str, str]:
+        """
+        Get available commands for `show` command.
+        prefix: the prefix of the command, e.g. `show interfaces`
+        Return a dict of available commands.
+        """
+        if not prefix:
+            if is_status:
+                return {
+                    s.name(): s.description()
+                    for s in self.status_nodes
+                }
+            else:
+                return {
+                    s.name(): s.description()
+                    for s in self.config_nodes
+                }
+        ctx = self.get_ctx(prefix, is_config=(not is_status))
+        if not ctx:
+            return {}
+        last_node = ctx[-1]
+        if isinstance(last_node.snode, SList):
+            # if it does not have a key, then wait for the key
+            if not last_node.list_keys:
+                return {}
+            # return a dict for all the child items
+            return {
+                child.name(): child.description()
+                for child in last_node.snode.children()
+                if (child.config_false() == is_status)
+            }
+        elif isinstance(last_node.snode, SContainer):
+            # return a dict for all the child items
+            return {
+                child.name(): child.description()
+                for child in last_node.snode.children()
+                if (child.config_false() == is_status)
+            }
+        elif isinstance(last_node.snode, SLeaf):
+            # if it is a leaf, then return empty
+            return {
+            }
+    
+    def get(self, xpath: str, include_default=False):
+        # get operational state
+        self.session.switch_datastore("operational")
+        return self.session.get_data(xpath, include_implicit_defaults=include_default)
+    
+    def get_config(self, xpath: str, include_default=False):
+        self.session.switch_datastore("running")
+        return self.session.get_data(xpath, include_implicit_defaults=include_default)
+    
+    def print_data(self, data: any, level=0, listname=""):
+        """
+        Print the data returned by get_config or get.
+        """
+        if isinstance(data, dict):
+            for k, v in data.items():
+                # if v is string or number, print it along with k
+                if isinstance(v, (str, int, float)):
+                    print("  " * level, k, v)
+                    continue
+                elif isinstance(v, list):
+                    self.print_data(v, level, k)
+                    continue
+                print("  " * level, k)
+                self.print_data(v, level + 1)
+        elif isinstance(data, list):
+            for v in data:
+                print("  " * level, listname)
+                self.print_data(v, level + 1)
+        else:
+            print("  " * level, data)

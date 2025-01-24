@@ -27,34 +27,28 @@ class TestSchemaContext(unittest.TestCase):
         self.assertEqual(len(nodes), 0)
 
     def test_get_ctx_config(self):
-        nodes = self.schema_context.get_ctx(['interfaces', 'interface', 'name'], is_config=True)
+        nodes = self.schema_context.get_ctx(['interfaces', 'interface', 'eth0'], is_config=True)
         self.assertEqual(len(nodes), 2)
         self.assertEqual(nodes[0].snode.name(), 'interfaces')
         self.assertEqual(nodes[1].snode.name(), 'interface')
-        self.assertEqual(nodes[1].list_keys, ['name'])
-
-    def test_get_ctx_config(self):
-        nodes = self.schema_context.get_ctx(['interfaces', 'interface', 'name'], is_config=True)
-        self.assertEqual(len(nodes), 2)
-        self.assertEqual(nodes[0].snode.name(), 'interfaces')
-        self.assertEqual(nodes[1].snode.name(), 'interface')
-        self.assertEqual(nodes[1].list_keys, ['name'])
-
+        self.assertEqual(nodes[1].list_keys, ['eth0'])
+        xp = self.schema_context.ctx_to_xpath(nodes)
+        self.assertEqual(xp, "/interfaces/interface[name='eth0']")
 
     def test_get_ctx_config_partial_name(self):
-        nodes = self.schema_context.get_ctx(['int', 'int', 'name'], is_config=True)
+        nodes = self.schema_context.get_ctx(['int', 'int', 'eth0'], is_config=True)
         self.assertEqual(len(nodes), 2)
         self.assertEqual(nodes[0].snode.name(), 'interfaces')
         self.assertEqual(nodes[1].snode.name(), 'interface')
-        self.assertEqual(nodes[1].list_keys, ['name'])
+        self.assertEqual(nodes[1].list_keys, ['eth0'])
 
     def test_get_ctx_config_partial_name_leaf(self):
-        nodes = self.schema_context.get_ctx(['int', 'int', 'name', 'admin-status'], is_config=True)
+        nodes = self.schema_context.get_ctx(['int', 'int', 'eth0', 'typ'], is_config=True)
         self.assertEqual(len(nodes), 3)
         self.assertEqual(nodes[0].snode.name(), 'interfaces')
         self.assertEqual(nodes[1].snode.name(), 'interface')
-        self.assertEqual(nodes[1].list_keys, ['name'])
-        self.assertEqual(nodes[2].snode.name(), 'admin-status')
+        self.assertEqual(nodes[1].list_keys, ['eth0'])
+        self.assertEqual(nodes[2].snode.name(), 'type')
 
 if __name__ == '__main__':
     unittest.main()

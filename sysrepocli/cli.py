@@ -202,15 +202,9 @@ class CliContext:
         demo = "demo"
         if self.mode == self.CONFIG:
             if self.path:
-                #path = '/'.join(str(x) for x in self.path)
-                path = ""
-                for item in self.path:
-                    if item.name in ["config", "system", "interfaces"]:
-                        continue
-                    path += f"-{item.name}"
-                    # if item.typ == ContextNode.LIST and item.key_val:
-                    #     path += f"-{item.key_val}"
-                return f"{demo}(config{path})# "
+                ctx = self.sc.get_ctx(self.path)
+                path = self.sc.ctx_to_xpath(ctx)
+                return f"{demo}(config {path})# "
             return f"{demo}(config)# "
         return f"{demo}# "
 
@@ -283,56 +277,71 @@ class CliContext:
     
     def normal_mode_show_action(self, args: List[str]):
         print(f"normal_mode_show_action: {args}")
+        ctx = self.sc.get_ctx(args[1:], False)
+        xpath = self.sc.ctx_to_xpath(ctx)
+        print(f"xpath: {xpath}")
+        data = self.sc.get(xpath)
+        # show the data in yaml format
+        self.sc.print_data(data)
+
 
     def normal_mode_show_complete(self, args: List[str]) -> Dict[str, str]:
-        return {
-            "hostname": "show hostname",
-            "uptime": "show uptime",
-        }
+        return self.sc.show_available_commands(args[1:], True)
     
     def normal_mode_show_running_config_action(self, args: List[str]):
-        print(f"normal_mode_show_running_config_action: {args}")
+        # print(f"normal_mode_show_running_config_action: {args}")
+        ctx = self.sc.get_ctx(args[2:], True)
+        xpath = self.sc.ctx_to_xpath(ctx)
+        data = self.sc.get_config(xpath)
+        # show the data in yaml format
+        self.sc.print_data(data)
 
     def normal_mode_show_running_config_complete(self, args: List[str]) -> Dict[str, str]:
-        return {
-            "interface": "Interfaces configuration",
-            "system": "System configuration",
-        }
+        return self.sc.show_available_commands(args[2:], False)
     
     def normal_mode_config_action(self, args: List[str]):
-        print(f"normal_mode_config_action: {args}")
+        # print(f"normal_mode_config_action: {args}")
         self.mode = self.CONFIG
 
     def normal_mode_exit_action(self, args: List[str]):
-        print(f"normal_mode_exit_action: {args}")
+        # print(f"normal_mode_exit_action: {args}")
         raise EOFError()
 
     def config_mode_action(self, args: List[str]):
-        print(f"config_mode_action: {args}")
-        for x in args[:-1]:
-            self.path.append(x)
+        # print(f"config_mode_action: {args}")
+        path = self.path + args
+        ctx = self.sc.get_ctx(path, is_config=True)
+        if len(ctx) > 0:
+            last_entry = ctx[-1]
+            if last_entry.is_leaf():
+                # TODO: set leaf value
+                print(f"Setting leaf value {last_entry.snode.name()}={last_entry.leaf_value}", )
+            else:
+                self.path = path
 
     def config_mode_complete(self, args: List[str]) -> Dict[str, str]:
-        return {
-            "interface": "Interfaces configuration",
-            "system": "System configuration",
-        }
+        path = self.path + args
+        return self.sc.show_available_commands(path, False)
     
     def config_mode_exit_action(self, args: List[str]):
-        print(f"config_mode_exit_action: {args}")
+        # print(f"config_mode_exit_action: {args}")
         if self.path:
             # pop last one
             self.path.pop()
+            # if the last entry is a list without key, pop again
+            ctx = self.sc.get_ctx(self.path, True)
+            if (ctx and ctx[-1].is_list() and not ctx[-1].list_keys):
+                self.path.pop()
         else:
             self.mode = self.NORMAL
 
     def config_mode_end_action(self, args: List[str]):
-        print(f"config_mode_end_action: {args}")
+        # print(f"config_mode_end_action: {args}")
         self.mode = self.NORMAL
         self.path = []
 
     def config_mode_top_action(self, args: List[str]):
-        print(f"config_mode_top_action: {args}")
+        # print(f"config_mode_top_action: {args}")
         self.path = []
 
     def config_mode_show_action(self, args: List[str]):
@@ -351,10 +360,7 @@ class CliContext:
         print(f"config_mode_no_action: {args}")
 
     def config_mode_no_complete(self, args: List[str]) -> Dict[str,str]:
-        return {
-            "interface": "Interfaces configuration",
-            "system": "System configuration",
-        }
+        return self.sc.show_available_commands(self.path + args[1:], False)
 
 
 class CommandLine:
